@@ -1,0 +1,23 @@
+{
+  "api.http.port": 18087,
+  "api": {
+    "noAuthUrl": [
+      "/token"
+    ]
+  },
+  "constant": {
+    "tokenExpire": 1200
+  },
+  "database": {
+    "host": "127.0.0.1",
+    "port": 5432,
+    "database": "vertx-test",
+    "username": "postgres",
+    "password": "postgres",
+    "maxPoolSize": 30
+  },
+  "redis": {
+    "host": "127.0.0.1",
+    "auth": "redis"
+  }
+}
