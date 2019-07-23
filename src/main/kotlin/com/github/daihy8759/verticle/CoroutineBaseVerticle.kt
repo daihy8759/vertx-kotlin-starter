@@ -1,6 +1,6 @@
 package com.github.daihy8759.verticle
 
-import com.github.daihy8759.common.util.fail
+import com.github.daihy8759.common.response.ApiResponse
 import io.vertx.core.eventbus.EventBus
 import io.vertx.core.eventbus.Message
 import io.vertx.ext.web.Route
@@ -29,7 +29,7 @@ open class CoroutineBaseVerticle : CoroutineVerticle() {
                 try {
                     fn(ctx)
                 } catch (e: Exception) {
-                    ctx.reply(fail().put("message", e.message))
+                    ctx.reply(ApiResponse(false, message = e.message))
                 }
             }
         }

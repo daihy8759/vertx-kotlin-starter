@@ -1,9 +1,9 @@
 package com.github.daihy8759.verticle
 
+import com.github.daihy8759.common.response.ApiResponse
+import com.github.daihy8759.common.response.ConstantCode.TOKEN_REQUIRE_FAIL
 import com.github.daihy8759.common.util.Constants
 import com.github.daihy8759.common.util.VerticleClass
-import com.github.daihy8759.common.util.fail
-import com.github.daihy8759.common.util.success
 import com.github.daihy8759.keys.TokenKey
 import io.vertx.core.eventbus.Message
 import io.vertx.core.json.JsonObject
@@ -13,7 +13,6 @@ import io.vertx.redis.RedisClient
 import io.vertx.sqlclient.SqlClient
 import io.vertx.sqlclient.Tuple
 import java.util.*
-
 
 @VerticleClass
 class TokenVerticle(val client: SqlClient) : CoroutineBaseVerticle() {
@@ -30,24 +29,24 @@ class TokenVerticle(val client: SqlClient) : CoroutineBaseVerticle() {
 
     private suspend fun getToken(message: Message<JsonObject>) {
         val paramObject = message.body().getJsonObject(Constants.REQUEST_PARAM)
-        val appId :String? = paramObject.getString("appId")
-        val appSecret:String? = paramObject.getString("appSecret")
-        if(appId.isNullOrBlank() || appSecret.isNullOrBlank()){
-            message.reply(fail().put("message", "app_id or secret is empty！"))
+        val appId: String? = paramObject.getString("appId")
+        val appSecret: String? = paramObject.getString("appSecret")
+        if (appId.isNullOrBlank() || appSecret.isNullOrBlank()) {
+            message.reply(ApiResponse(false, TOKEN_REQUIRE_FAIL))
             return;
         }
         if (exists(appId, appSecret)) {
             message.reply(createToken(appId))
         } else {
-            message.reply(fail().put("message", "app_id or secret not correct！"))
+            message.reply(ApiResponse(false, TOKEN_REQUIRE_FAIL))
         }
     }
 
-    private suspend fun createToken(appId: String): JsonObject {
+    private suspend fun createToken(appId: String): ApiResponse {
         val expiresIn = constantConfig.getLong("tokenExpire", 1200L)
         val token = UUID.randomUUID().toString().replace("-", "")
         redisClient.setexAwait(token, expiresIn, appId)
-        return success().put("data", JsonObject().put("token", token).put("expiresIn", expiresIn))
+        return ApiResponse(true, data = JsonObject().put("token", token).put("expiresIn", expiresIn))
     }
 
     private suspend fun exists(appId: String, appSecret: String): Boolean {

@@ -1,5 +1,9 @@
 package com.github.daihy8759.api
 
+import com.github.daihy8759.common.response.ApiResponse
+import com.github.daihy8759.common.response.BufferResponse
+import com.github.daihy8759.common.response.ConstantCode
+import com.github.daihy8759.common.response.FileResponse
 import com.github.daihy8759.common.util.*
 import com.github.daihy8759.service.TokenService
 import com.github.daihy8759.verticle.CoroutineBaseVerticle
@@ -11,12 +15,13 @@ import io.vertx.ext.web.Router
 import io.vertx.ext.web.RoutingContext
 import io.vertx.ext.web.handler.BodyHandler
 import io.vertx.kotlin.core.eventbus.requestAwait
+import io.vertx.kotlin.core.file.readFileAwait
 import io.vertx.kotlin.core.http.listenAwait
 import io.vertx.redis.RedisClient
 import org.apache.logging.log4j.LogManager
 
 @VerticleClass
-class ApiVerticle() : CoroutineBaseVerticle() {
+class ApiVerticle : CoroutineBaseVerticle() {
 
     val log = LogManager.getLogger()
 
@@ -26,7 +31,7 @@ class ApiVerticle() : CoroutineBaseVerticle() {
     private lateinit var tokenService: TokenService
 
     override suspend fun start() {
-        var apiObject = config.getJsonObject("api")
+        val apiObject = config.getJsonObject("api")
         noAuthUrl = apiObject.getJsonArray("noAuthUrl")
 
         val redisClient = RedisClient.create(vertx, config.getJsonObject("redis"))
@@ -43,66 +48,73 @@ class ApiVerticle() : CoroutineBaseVerticle() {
 
     private suspend fun handleApi(routingContext: RoutingContext) {
         val requestPath = routingContext.request().path()
-        routingContext.response().putHeader(HttpHeaders.CONTENT_TYPE, "application/json;charset=UTF-8")
         if (requestPath.length < 7) {
-            routingContext.response.endWithJson(fail().put("message", "handler not exists!"))
+            routingContext.response.endWithJson(ApiResponse(false, "handler not exists!"))
             return
         }
         val apiVersion = requestPath.substring(5, 7)
         val eventBusKey = requestPath.substring(7)
 
         if (noAuthUrl.contains(eventBusKey)) {
-            sendEvent(routingContext, eventBusKey, apiVersion)
+            sendEvent(routingContext, eventBusKey, apiVersion, null)
         } else {
-            var result = checkToken(routingContext.request())
-            if (result) {
-                sendEvent(routingContext, eventBusKey, apiVersion)
+            val userInfo = checkToken(routingContext.request())
+            if (userInfo.isNullOrBlank()) {
+                routingContext.response().endWithJson(ApiResponse(false,
+                        ConstantCode.TOKEN_NOT_FOUND))
             } else {
-                routingContext.response().endWithJson(success());
+                sendEvent(routingContext, eventBusKey, apiVersion, userInfo)
             }
         }
     }
 
-    private suspend fun sendEvent(routingContext: RoutingContext, eventBusKey: String, apiVersion: String) {
+    private suspend fun sendEvent(routingContext: RoutingContext, eventBusKey: String,
+                                  apiVersion: String, userInfo: String?) {
         val response = routingContext.response
         try {
-            var message = vertx.eventBus().requestAwait<JsonObject>(
+            val message = vertx.eventBus().requestAwait<Any>(
                     eventBusKey,
-                    parseParam(routingContext, JsonObject().put(Constants.API_VERSION, apiVersion)))
-            response.endWithJson(message.body())
+                    parseParam(routingContext, JsonObject().put(Constants.API_VERSION, apiVersion)
+                            .put(Constants.USER_INFO, userInfo)))
+            when (val replyBody = message.body()) {
+                is BufferResponse -> response
+                        .putHeader(HttpHeaders.CONTENT_TYPE, replyBody.contentType)
+                        .end(replyBody.buffer)
+                is FileResponse -> response
+                        .putHeader(HttpHeaders.CONTENT_TYPE, replyBody.contentType)
+                        .end(vertx.fileSystem().readFileAwait(replyBody.filePath))
+                else -> {
+                    response.endWithJson(replyBody)
+                }
+            }
         } catch (e: Exception) {
-            log.error(e)
-            response.endWithJson(fail().put("message", e.message))
+            log.error(getStackTrace(e))
+            response.endWithJson(ApiResponse(false, e.message.orEmpty()))
         }
     }
 
     private fun getToken(request: HttpServerRequest): String {
-        val token: String? = request.getHeader(Constants.AUTH_HEADER)
-        log.debug("token: {}", token)
-        if (token.isNullOrBlank()) {
-            return ""
-        }
+        val token: String = request.getHeader(Constants.AUTH_HEADER)
+                .orEmpty()
+                .ifEmpty { request.getParam("token").orEmpty() }
         return token.trim().replace(":", "")
     }
 
-    private suspend fun checkToken(request: HttpServerRequest): Boolean {
-        var token = getToken(request)
-        if (token.isNullOrBlank()) {
-            return false
+    private suspend fun checkToken(request: HttpServerRequest): String? {
+        val token = getToken(request)
+        if (token.isBlank()) {
+            return ""
         }
-        if (tokenService.getToken(token)!!.isNotBlank()) {
-            return true
-        }
-        return false
+        return tokenService.getToken(token)
     }
 
     private fun parseParam(routingContext: RoutingContext, extParam: JsonObject): JsonObject {
-        val paramsMap = routingContext.request().params()
+        val paramsMap = routingContext.request.params()
         val paramObject = JsonObject()
         extParam.put(Constants.TOKEN, getToken(routingContext.request()))
         extParam.put(Constants.REQUEST_PARAM, paramObject)
         paramsMap.entries().forEach { t -> paramObject.put(t.key, t.value) }
-        val contentType = routingContext.request().getHeader("Content-Type")
+        val contentType = routingContext.request().getHeader(HttpHeaders.CONTENT_TYPE)
         if (contentType.isNotBlank() && contentType.startsWith("application/json")) {
             extParam.put(Constants.REQUEST_BODY, routingContext.bodyAsJson)
         }
