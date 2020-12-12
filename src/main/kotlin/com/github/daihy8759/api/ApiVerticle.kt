@@ -17,7 +17,9 @@ import io.vertx.ext.web.handler.BodyHandler
 import io.vertx.kotlin.core.eventbus.requestAwait
 import io.vertx.kotlin.core.file.readFileAwait
 import io.vertx.kotlin.core.http.listenAwait
-import io.vertx.redis.RedisClient
+import io.vertx.kotlin.coroutines.await
+import io.vertx.redis.client.Redis
+import io.vertx.redis.client.RedisOptions
 import org.apache.logging.log4j.LogManager
 
 @VerticleClass
@@ -34,7 +36,7 @@ class ApiVerticle : CoroutineBaseVerticle() {
         val apiObject = config.getJsonObject("api")
         noAuthUrl = apiObject.getJsonArray("noAuthUrl")
 
-        val redisClient = RedisClient.create(vertx, config.getJsonObject("redis"))
+        val redisClient = Redis.createClient(vertx, RedisOptions(config.getJsonObject("redis")))
         this.tokenService = TokenService(redisClient)
 
         val router = Router.router(vertx)
@@ -43,7 +45,7 @@ class ApiVerticle : CoroutineBaseVerticle() {
 
         val host = config.getString("api.http.address", defaultHost)
         val port = config.getInteger("api.http.port", defaultPort)
-        vertx.createHttpServer().requestHandler(router).listenAwait(port, host)
+        vertx.createHttpServer().requestHandler(router).listen(port, host).await()
     }
 
     private suspend fun handleApi(routingContext: RoutingContext) {
@@ -72,17 +74,17 @@ class ApiVerticle : CoroutineBaseVerticle() {
                                   apiVersion: String, userInfo: String?) {
         val response = routingContext.response
         try {
-            val message = vertx.eventBus().requestAwait<Any>(
+            val message = vertx.eventBus().request<Any>(
                     eventBusKey,
                     parseParam(routingContext, JsonObject().put(Constants.API_VERSION, apiVersion)
-                            .put(Constants.USER_INFO, userInfo)))
+                            .put(Constants.USER_INFO, userInfo))).await()
             when (val replyBody = message.body()) {
                 is BufferResponse -> response
                         .putHeader(HttpHeaders.CONTENT_TYPE, replyBody.contentType)
                         .end(replyBody.buffer)
                 is FileResponse -> response
                         .putHeader(HttpHeaders.CONTENT_TYPE, replyBody.contentType)
-                        .end(vertx.fileSystem().readFileAwait(replyBody.filePath))
+                        .end(vertx.fileSystem().readFile(replyBody.filePath).await())
                 else -> {
                     response.endWithJson(replyBody)
                 }
