@@ -14,9 +14,6 @@ import io.vertx.core.json.JsonObject
 import io.vertx.ext.web.Router
 import io.vertx.ext.web.RoutingContext
 import io.vertx.ext.web.handler.BodyHandler
-import io.vertx.kotlin.core.eventbus.requestAwait
-import io.vertx.kotlin.core.file.readFileAwait
-import io.vertx.kotlin.core.http.listenAwait
 import io.vertx.kotlin.coroutines.await
 import io.vertx.redis.client.Redis
 import io.vertx.redis.client.RedisOptions
