@@ -1,5 +1,7 @@
 package com.github.daihy8759
 
+import com.fasterxml.jackson.annotation.JsonInclude
+import com.fasterxml.jackson.databind.DeserializationFeature
 import com.github.daihy8759.api.ApiVerticle
 import com.github.daihy8759.common.response.ApiResponse
 import com.github.daihy8759.common.response.BufferResponse
@@ -9,6 +11,7 @@ import com.github.daihy8759.common.response.codec.BufferMessageCodec
 import com.github.daihy8759.common.response.codec.FileMessageCodec
 import com.github.daihy8759.verticle.TokenVerticle
 import io.vertx.core.DeploymentOptions
+import io.vertx.core.json.jackson.DatabindCodec
 import io.vertx.kotlin.coroutines.CoroutineVerticle
 import io.vertx.kotlin.coroutines.await
 import io.vertx.pgclient.PgConnectOptions
@@ -22,6 +25,9 @@ class MainVerticle : CoroutineVerticle() {
         eventBus.registerDefaultCodec(ApiResponse::class.java, ApiMessageCodec())
         eventBus.registerDefaultCodec(BufferResponse::class.java, BufferMessageCodec())
         eventBus.registerDefaultCodec(FileResponse::class.java, FileMessageCodec())
+        var mapper = DatabindCodec.mapper()
+        mapper.configure(DeserializationFeature.FAIL_ON_UNKNOWN_PROPERTIES, false)
+        mapper.setSerializationInclusion(JsonInclude.Include.NON_NULL)
 
         val databaseConfig = config.getJsonObject("database")
         val connectOptions = PgConnectOptions().setHost(databaseConfig.getString("host"))

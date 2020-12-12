@@ -13,6 +13,7 @@
     <properties>
         <vertx.version>4.0.0</vertx.version>
         <kotlin.version>1.4.21</kotlin.version>
+        <jackson.version>2.11.3</jackson.version>
         <log4j.version>2.13.3</log4j.version>
         <assertj-core.version>3.8.0</assertj-core.version>
         <project.build.sourceEncoding>UTF-8</project.build.sourceEncoding>
@@ -54,6 +55,11 @@
         <dependency>
             <groupId>io.vertx</groupId>
             <artifactId>vertx-pg-client</artifactId>
+        </dependency>
+        <dependency>
+            <groupId>com.fasterxml.jackson.core</groupId>
+            <artifactId>jackson-databind</artifactId>
+            <version>${jackson.version}</version>
         </dependency>
         <!-- log -->
         <dependency>
